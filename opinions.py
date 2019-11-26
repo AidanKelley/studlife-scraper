@@ -3,13 +3,21 @@ import math
 from scipy import stats
 import random
 
+# set the seed, so the "random" results are the same everytime
+# this presents accidental bias from re-running the statistics
+# if you do not like the results
+
+random.seed(7804925)
+
 lvl3_words = ["must", "need", "needs", "deserves", "deserve", "commend"]
 lvl2_words = ["should", "shouldn't", "recommend", "urge", "expect"]
 lvl1_words = ["believe", "think", "seems", "understand", "doubt", "suggest", "feel", "blame",
     "object", "see", "consider", "share", "sure", "like", "say", "wish", "support", "agree",
     "disagree", "opposed", "shocked", "disappointed", "proud", "happy", "glad", "angry", "hate"]
 
-opinion_words = lvl3_words + lvl2_words + lvl1_words + ["i", "editorial", "board", "student"]
+opinion_words = lvl3_words + lvl2_words + lvl1_words
+
+fpp_multis = [["I"], ["we"], ["Student", "Life", "Editorial", "Board"]]
 
 def get_context(words, index):
     first_index = index
@@ -115,7 +123,36 @@ def process_if(article):
 
 def match_multi_word(words, start_index, multi_word):
     for i in range(len(multi_word)):
-        pass
+        if start_index+i >= len(words):
+            return False
+
+        if process_word(words[start_index + i].lower()) != process_word(multi_word[i].lower()):
+            return False
+
+    return True
+
+def match_multi_word_array(words, start_index, multi_word_array):
+    for mulit_word in multi_word_array:
+        if match_multi_word(words, start_index, mulit_word):
+            return True
+
+    return False
+
+def word_in_next_6(words, start_index, word):
+    for index in range(6):
+        if start_index + index >= len(words):
+            return False
+        if process_word(word.lower()) == process_word(words[start_index + index].lower()):
+            return True
+
+    return False
+
+def opinion_word_in_next_6(words, index, opinion_words):
+    for opinion_word in opinion_words:
+        if word_in_next_6(words, index, opinion_word):
+            return True
+
+    return False
 
 def process_first_person(article):
     
@@ -125,9 +162,11 @@ def process_first_person(article):
     context = []
 
     for index, word in enumerate(words):
-        if process_word(word.lower()) in ["i", "we", "us"]:
-            context.append(get_context(words, index))
+        if match_multi_word_array(words, index, fpp_multis) \
+        and opinion_word_in_next_6(words, index, opinion_words):
             count += 1
+
+            context.append(get_context(words, index))
 
     return count, context;
 
@@ -162,6 +201,8 @@ collection_names = ["Staff Editorials", "Columns", "Op-Eds"]
 # a processor for each category
 processors = [process_lvl3, process_lvl2, process_lvl1, process_while, process_if, process_first_person]
 processor_names = ["lvl3", "lvl2", "lvl1", "while", "if", "fpp"]
+
+process_file_names = ["out/" + f + ".txt" for f in ["lvl3", "lvl2", "lvl1", "while", "if", "fpp"]]
 
 def process_articles(articles, processor):
 
@@ -205,6 +246,12 @@ def calc_t(m1, m2, std1, std2, l1, l2):
     else:
         return mean / total_std
 
+# prints out all distinct pairs of two integers (x, y) 0 <= x < y < n
+def range_pairs(n):
+    for i in range(n):
+        for j in range(i+1, n):
+            yield i, j
+
 
 all_contexts = [[] for _ in processors]
 
@@ -226,24 +273,26 @@ for proc_index, processor in enumerate(processors):
 
         all_contexts[proc_index] += contexts
 
+        col_name = collection_names[col_index]
+
+        print(f"{proc_name} for {col_name}: average: {avg}, standard deviation: {std}, sample size: {article_len}")
 
     # TODO: Make more readable
-    for i in range(len(avgs)):
-        for j in range(i+1, len(avgs)):
-            col1_name = collection_names[i]
-            col2_name = collection_names[j]
+    for i, j in range_pairs(len(avgs)):
+        col1_name = collection_names[i]
+        col2_name = collection_names[j]
 
-            t = calc_t(avgs[i], avgs[j], stds[i], stds[j], article_lens[i], article_lens[j])
-            
-            df = article_lens[i] + article_lens[j] - 2
+        t = calc_t(avgs[i], avgs[j], stds[i], stds[j], article_lens[i], article_lens[j])
+        
+        df = article_lens[i] + article_lens[j] - 2
 
-            abs_t = t if t > 0 else -t
+        abs_t = t if t > 0 else -t
 
-            p = 2*(1 - stats.t.cdf(abs_t, df=df))
+        p = 2*(1 - stats.t.cdf(abs_t, df=df))
 
-            significant = "SIGNIFICANT " if p < 0.01 else "            "
+        significant = "SIGNIFICANT " if p < 0.01 else "            "
 
-            print(f"{significant}{proc_name}: {col1_name}, {col2_name}: p: {p}. t: {t}, df: {df}, {avgs[i]} +- {stds[i]} ({article_lens[i]}), {avgs[j]} +- {stds[j]} ({article_lens[j]})")
+        print(f"{significant}{proc_name}: comparing {col1_name}, {col2_name}: p: {p}. t: {t}, df: {df}")
 
 
     if len(all_contexts[proc_index]) <= 30:
@@ -251,9 +300,13 @@ for proc_index, processor in enumerate(processors):
     else:
         random_contexts = random.sample(population=all_contexts[proc_index], k=30)
 
+    format_contexts = "\n".join(random_contexts)
+
+    with open(process_file_names[proc_index], "w") as out_file:
+        out_file.write(format_contexts)
+    
+
     # print("\n".join(random_contexts))
-
-
 
 # print(process_articles(articles))
 
