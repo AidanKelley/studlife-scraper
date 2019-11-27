@@ -216,12 +216,15 @@ def process_articles(articles, processor):
 
     for article in articles:
         content = article[3]
+        url = article[1]
 
         article_len = len(split_article(content))
 
         article_count += 1
 
         count, context = processor(content)
+        
+        context = [line + " " + url for line in context]
 
         val = count/article_len
 
@@ -310,6 +313,15 @@ for proc_index, processor in enumerate(processors):
 
 # print(process_articles(articles))
 
+collection_file_names = ["out/staff.txt", "out/column.txt", "out/oped.txt"]
+
+for index, collection in enumerate(collections):
+  urls = [article[1] for article in random.sample(collection, k=30)]
+  
+  formatted = "\n".join(urls)
+  
+  with open(collection_file_names[index], "w") as file:
+    file.write(formatted)
 
 
 
